@@ -9,7 +9,15 @@
       "client_info": {
         "mobilesdk_app_id": "1:213232402319:android:62d3dddfe2aec3a05055fa",
         "android_client_info": {
-          "package_name": "com.example.desafio1_mobile"
+          "package_name": "com.example.desafio1_mobile",
+          "certificate_hash": [
+            {
+              "sha1": "59FBD4A652ADDE5FC32219AD8B3DE2C4740B2CE8"
+            },
+            {
+              "sha256": "B0E6D6DDFA3C29EAFFAFC2B28A3FB5160383918922441FD3F1E7200053DC2543"
+            }
+          ]
         }
       },
       "oauth_client": [],

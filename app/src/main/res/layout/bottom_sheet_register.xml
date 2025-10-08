@@ -43,7 +43,7 @@
             android:textStyle="bold"/>
 
         <EditText
-            android:id="@+id/inputEmail"
+            android:id="@+id/inputEmailRegister"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="Example@test.com"
@@ -58,9 +58,10 @@
             android:textStyle="bold"/>
 
         <EditText
-            android:id="@+id/inputPassword"
+            android:id="@+id/inputPasswordRegister"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:inputType="textPassword"
             android:hint="Password" />
 
         <TextView
@@ -72,17 +73,29 @@
             android:textStyle="bold"/>
 
         <EditText
-            android:id="@+id/inputName"
+            android:id="@+id/inputNameRegister"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="Geraldo" />
 
     </LinearLayout>
 
-    <Button
-        android:id="@+id/btnGoToLogin"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Já tem cadastro?" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <Button
+            android:id="@+id/btnGoToLogin"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Já tem cadastro?" />
+
+        <Button
+            android:id="@+id/btnRegister"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cadastrar" />
+    </LinearLayout>
 
 </LinearLayout>
