@@ -3,6 +3,7 @@ package com.example.desafio1_mobile;
 import static android.content.ContentValues.TAG;
 
 import android.app.Dialog;
+import android.database.Cursor;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Patterns;
@@ -13,6 +14,7 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.database.Cursor;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
@@ -29,13 +31,18 @@ import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.firebase.Timestamp;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.Random;
 
 public class HomePageActivity extends AppCompatActivity {
@@ -45,6 +52,10 @@ public class HomePageActivity extends AppCompatActivity {
     private FirebaseFirestore mStore;
 
     private LinearLayout layoutTasks;
+
+    private TaskSqlite dbHelper;
+
+    private Button btnGoToLogin;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,12 +70,13 @@ public class HomePageActivity extends AppCompatActivity {
 
         mAuth = FirebaseAuth.getInstance();
         mStore = FirebaseFirestore.getInstance();
+        dbHelper = new TaskSqlite(this);
 
-        Button btnGoToLogin = findViewById(R.id.btnGoToLogin);
+
+        btnGoToLogin = findViewById(R.id.btnGoToLogin);
         FloatingActionButton btnAddTask = findViewById(R.id.btnAddTask);
         layoutTasks = findViewById(R.id.layoutTasks);
 
-        btnGoToLogin.setOnClickListener(v -> showLoginBottomSheet());
         btnAddTask.setOnClickListener(v -> showAddTask());
 
     }
@@ -78,6 +90,8 @@ public class HomePageActivity extends AppCompatActivity {
     }
 
     //////////////----TUDO DE LOGIN E CADASTRO----//////////////////
+
+
 
     private void showLoginBottomSheet() {
 
@@ -172,23 +186,39 @@ public class HomePageActivity extends AppCompatActivity {
     }
 
 
-    public void login(String email, String password, BottomSheetDialog bottomSheetDialog){
-        mAuth.signInWithEmailAndPassword(email,password)
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            Log.d(TAG, "signInWithCustomToken:success");
-                            FirebaseUser user = mAuth.getCurrentUser();
-                            closBottomSheet(bottomSheetDialog);
-                            updateUI(user);
-                        } else {
-                            // If sign in fails, display a message to the user.
-                            Log.w(TAG, "signInWithCustomToken:failure", task.getException());
-                            Toast.makeText(getApplicationContext(), "Informações inválidas, email ou senha errados.",
-                                    Toast.LENGTH_SHORT).show();
-                            updateUI(null);
+    public void login(String email, String password, BottomSheetDialog bottomSheetDialog) {
+        mAuth.signInWithEmailAndPassword(email, password)
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
+                        Log.d(TAG, "signInWithCustomToken:success");
+                        FirebaseUser currentUser = mAuth.getCurrentUser();
+
+                        if (currentUser != null) {
+                            String uid = currentUser.getUid();
+                            mStore.collection("users").document(uid).get()
+                                    .addOnCompleteListener(docTask -> {
+                                        if (docTask.isSuccessful()) {
+                                            DocumentSnapshot document = docTask.getResult();
+                                            if (document.exists()) {
+                                                boolean isFirstLogin = document.getBoolean("first_login");
+                                                if (isFirstLogin) {
+                                                    transferSqliteTaskFirestore(uid);
+                                                    mStore.collection("users").document(uid).update("first_login", false);
+                                                    Toast.makeText(getApplicationContext(), "primeiro login", Toast.LENGTH_SHORT).show();
+                                                }
+                                            } else {
+                                                Toast.makeText(getApplicationContext(), "não primeiro login", Toast.LENGTH_SHORT).show();
+                                            }
+                                        }
+                                        closBottomSheet(bottomSheetDialog);
+                                        updateUI(currentUser);
+                                    });
                         }
+                    } else {
+                        Log.w(TAG, "signInWithCustomToken:failure", task.getException());
+                        Toast.makeText(getApplicationContext(), "Informações inválidas, email ou senha errados.",
+                                Toast.LENGTH_SHORT).show();
+                        updateUI(null);
                     }
                 });
     }
@@ -222,11 +252,9 @@ public class HomePageActivity extends AppCompatActivity {
                                         }
                                     });
 
-
-
                             closBottomSheet(bottomSheetDialog);
                             showLoginBottomSheet();
-                            updateUI(user);
+
                         } else {
                             Log.w(TAG, "createUserWithEmail:failure", task.getException());
                             Toast.makeText(getApplicationContext(),
@@ -240,17 +268,28 @@ public class HomePageActivity extends AppCompatActivity {
 
     public void logout(){
         FirebaseAuth.getInstance().signOut();
+        Toast.makeText(this, "Deslogado", Toast.LENGTH_SHORT).show();
+        updateUI(null);
     }
 
     private void updateUI(FirebaseUser user) {
         if (user != null) {
             Toast.makeText(this, "Bem-vindo " + user.getEmail(), Toast.LENGTH_SHORT).show();
+            btnGoToLogin.setText("Logout");
+            btnGoToLogin.setOnClickListener(v-> logout());
         } else {
             Toast.makeText(this, "Você não está logado.", Toast.LENGTH_SHORT).show();
+            btnGoToLogin.setText("Login");
+            btnGoToLogin.setOnClickListener(v-> showLoginBottomSheet());
         }
+
+        loadTasks();
+
     }
 
+    ///////////////////////////////////////////////
     //////////////----TAREFAS----//////////////////
+    ///////////////////////////////////////////////
 
     private void showAddTask(){
 
@@ -285,12 +324,18 @@ public class HomePageActivity extends AppCompatActivity {
 
     private void createTask(String title, String description, int day, int month, int year) {
 
-        FirebaseUser user = mAuth.getCurrentUser();
-        String uid = user.getUid();
+        FirebaseUser curentUser = mAuth.getCurrentUser();
 
-        if (!uid.isEmpty()) {
+        if (curentUser != null) {
 
-            TaskApp newTaskApp = new TaskApp(title, description, uid);
+            String uid = curentUser.getUid();
+
+            Calendar calendar = Calendar.getInstance();
+            calendar.set(year, month, day);
+            Date date = calendar.getTime();
+            Timestamp timestamp = new Timestamp(date);
+
+            TaskApp newTaskApp = new TaskApp(title, description, timestamp, uid);
 
             mStore.collection("tasks").document()
                     .set(newTaskApp)
@@ -307,8 +352,19 @@ public class HomePageActivity extends AppCompatActivity {
                             Log.w(TAG, "Error writing document", e);
                         }
                     });
+
+                Toast.makeText(getApplicationContext(), "Salvo Firestore", Toast.LENGTH_SHORT).show();
+
         } else {
-            
+
+            int countTasks = dbHelper.getTasksCount();
+            if (countTasks >= 5){
+                Toast.makeText(getApplicationContext(), "Limite de 5 tarefas, faça login para mais tarefas", Toast.LENGTH_SHORT).show();
+                return;
+            } else {
+                dbHelper.createtTaskSqlite(title, description, false);
+                Toast.makeText(getApplicationContext(), "Salvo Sqlite", Toast.LENGTH_SHORT).show();
+            }
         }
 
         loadTasks();
@@ -317,33 +373,93 @@ public class HomePageActivity extends AppCompatActivity {
 
     private void loadTasks(){
 
+        layoutTasks.removeAllViews();
+
         FirebaseUser currentUser = mAuth.getCurrentUser();
-        String uid = currentUser.getUid();
 
-        mStore.collection("tasks")
-                .whereEqualTo("uid", uid)
-                .get()
-                .addOnSuccessListener(queryDocumentSnapshots -> {
+        if(currentUser != null) {
 
-                    layoutTasks.removeAllViews();
+            String uid = currentUser.getUid();
+            mStore.collection("tasks")
+                    .whereEqualTo("uid", uid)
+                    .get()
+                    .addOnSuccessListener(queryDocumentSnapshots -> {
 
-                    for(QueryDocumentSnapshot document : queryDocumentSnapshots) {
+                        for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
 
-                        View taskView = getLayoutInflater().inflate(R.layout.task_item, layoutTasks, false);
-                        TextView taskTitle = taskView.findViewById(R.id.taskTitle);
-                        TextView taskDescription = taskView.findViewById(R.id.taskDescription);
+                            View taskView = getLayoutInflater().inflate(R.layout.task_item, layoutTasks, false);
 
+                            TextView taskTitle = taskView.findViewById(R.id.taskTitle);
+                            TextView taskDescription = taskView.findViewById(R.id.taskDescription);
+                            TextView taskConclusionDate = taskView.findViewById(R.id.taskConclusionDate);
 
-                        taskTitle.setText(document.getString("title"));
-                        taskDescription.setText(document.getString("description"));
+                            taskTitle.setText(document.getString("title"));
+                            taskDescription.setText(document.getString("description"));
+                            Timestamp timestamp = document.getTimestamp("conclusion_date");
+                            Date date = timestamp.toDate();
+                            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+                            taskConclusionDate.setText(sdf.format(date));
 
-                        layoutTasks.addView(taskView);
+                            layoutTasks.addView(taskView);
 
-                    }})
+                        }
+                    })
                     .addOnFailureListener(e -> {
-                    Toast.makeText(getApplicationContext(), "Erro ao carregar tarefas", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getApplicationContext(), "Erro ao carregar tarefas", Toast.LENGTH_SHORT).show();
 
-                });
+                    });
+        } else {
+
+            Cursor cursor = dbHelper.getAllTasks();
+
+            if(cursor.moveToFirst()) {
+                do {
+
+                    View taskView = getLayoutInflater().inflate(R.layout.task_item, layoutTasks, false);
+                    TextView taskTitle = taskView.findViewById(R.id.taskTitle);
+                    TextView taskDescription = taskView.findViewById(R.id.taskDescription);
+
+                    String title = cursor.getString(cursor.getColumnIndexOrThrow("title"));
+                    String description = cursor.getString(cursor.getColumnIndexOrThrow("description"));
+
+                    taskTitle.setText(title);
+                    taskDescription.setText(description);
+
+                    layoutTasks.addView(taskView);
+
+                } while (cursor.moveToNext());
+            }
+
+            cursor.close();
+
+        }
+
+    }
+
+    private void transferSqliteTaskFirestore(String uid) {
+
+        Cursor cursor = dbHelper.getAllTasks();
+
+        if(cursor != null){
+            if (cursor.moveToFirst()) {
+                do{
+
+                    String title = cursor.getString(cursor.getColumnIndexOrThrow("title"));
+                    String description = cursor.getString(cursor.getColumnIndexOrThrow("description"));
+
+                    TaskApp taskToTransfer = new TaskApp(title, description, null, uid);
+
+                    mStore.collection("tasks").document()
+                            .set(taskToTransfer);
+
+                } while (cursor.moveToNext());
+                cursor.close();
+
+            }
+
+            dbHelper.deleteAllTasks();
+
+        }
 
     }
 

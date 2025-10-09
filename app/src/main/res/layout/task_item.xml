@@ -37,11 +37,11 @@
             android:ellipsize="end"/>
 
         <TextView
-            android:id="@+id/taskDate"
+            android:id="@+id/taskConclusionDate"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="23/10/2025" />
+            android:text="Data de conclusão" />
 
 
     </LinearLayout>

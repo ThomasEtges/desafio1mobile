@@ -1,12 +1,20 @@
 package com.example.desafio1_mobile;
 
+import android.text.BoringLayout;
+
 public class User {
     private String uid;
     private String name;
+    private final Boolean first_login;
 
     public User(String uid, String name) {
         this.uid = uid;
         this.name = name;
+        this.first_login = true;
+    }
+
+    public Boolean getFirst_login() {
+        return first_login;
     }
 
     public String getUid() {
