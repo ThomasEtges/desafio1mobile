@@ -11,6 +11,7 @@ constraintlayout = "2.2.1"
 materialSymbolsVariablefont = "0.19.2"
 googleGmsGoogleServices = "4.4.3"
 firebaseAuth = "24.0.1"
+firebaseFirestore = "26.0.1"
 
 [libraries]
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
@@ -23,6 +24,7 @@ activity = { group = "androidx.activity", name = "activity", version.ref = "acti
 constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
 material-symbols-variablefont = { module = "com.google.android.material:material-symbols-variablefont", version.ref = "materialSymbolsVariablefont" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version.ref = "firebaseAuth" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore", version.ref = "firebaseFirestore" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

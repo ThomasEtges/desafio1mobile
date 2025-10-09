@@ -2,12 +2,16 @@ package com.example.desafio1_mobile;
 
 import static android.content.ContentValues.TAG;
 
+import android.app.Dialog;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Patterns;
 import android.view.View;
 import android.widget.Button;
+import android.widget.DatePicker;
 import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
@@ -17,17 +21,30 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.example.desafio1_mobile.TaskApp;
+import com.example.desafio1_mobile.User;
 import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+
+import java.util.Random;
 
 public class HomePageActivity extends AppCompatActivity {
 
     private FirebaseAuth mAuth;
+
+    private FirebaseFirestore mStore;
+
+    private LinearLayout layoutTasks;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,13 +58,23 @@ public class HomePageActivity extends AppCompatActivity {
         });
 
         mAuth = FirebaseAuth.getInstance();
+        mStore = FirebaseFirestore.getInstance();
 
         Button btnGoToLogin = findViewById(R.id.btnGoToLogin);
         FloatingActionButton btnAddTask = findViewById(R.id.btnAddTask);
+        layoutTasks = findViewById(R.id.layoutTasks);
 
         btnGoToLogin.setOnClickListener(v -> showLoginBottomSheet());
         btnAddTask.setOnClickListener(v -> showAddTask());
 
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+        updateUI(currentUser);
+        loadTasks();
     }
 
     //////////////----TUDO DE LOGIN E CADASTRO----//////////////////
@@ -106,7 +133,7 @@ public class HomePageActivity extends AppCompatActivity {
             Toast.makeText(getApplicationContext(), "Senha deve ter no mínimo 6 caracteres", Toast.LENGTH_SHORT).show();
         }
         else{
-            registerUser(email,password, bottomSheetDialog);
+            registerUser(email,password, name ,bottomSheetDialog);
         }
     }
 
@@ -151,40 +178,61 @@ public class HomePageActivity extends AppCompatActivity {
                     @Override
                     public void onComplete(@NonNull Task<AuthResult> task) {
                         if (task.isSuccessful()) {
-                            // Sign in success, update UI with the signed-in user's information
                             Log.d(TAG, "signInWithCustomToken:success");
                             FirebaseUser user = mAuth.getCurrentUser();
                             closBottomSheet(bottomSheetDialog);
-                            //updateUI(user);
+                            updateUI(user);
                         } else {
                             // If sign in fails, display a message to the user.
                             Log.w(TAG, "signInWithCustomToken:failure", task.getException());
                             Toast.makeText(getApplicationContext(), "Informações inválidas, email ou senha errados.",
                                     Toast.LENGTH_SHORT).show();
-                            //updateUI(null);
+                            updateUI(null);
                         }
                     }
                 });
     }
 
-    public void registerUser(String email, String password, BottomSheetDialog bottomSheetDialog) {
+    public void registerUser(String email, String password,  String name, BottomSheetDialog bottomSheetDialog) {
         mAuth.createUserWithEmailAndPassword(email, password)
                 .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
                     @Override
                     public void onComplete(@NonNull Task<AuthResult> task) {
                         if (task.isSuccessful()) {
                             Log.d(TAG, "createUserWithEmail:success");
+
                             FirebaseUser user = mAuth.getCurrentUser();
                             Toast.makeText(getApplicationContext(),"Usuário cadastrado com sucesso!", Toast.LENGTH_SHORT).show();
+                            String uid = user.getUid();
+
+                            User newUser = new User(uid, name);
+
+                            mStore.collection("users").document(uid)
+                                    .set(newUser)
+                                    .addOnSuccessListener(new OnSuccessListener<Void>() {
+                                        @Override
+                                        public void onSuccess(Void aVoid) {
+                                            Log.d(TAG, "DocumentSnapshot successfully written!");
+                                        }
+                                    })
+                                    .addOnFailureListener(new OnFailureListener() {
+                                        @Override
+                                        public void onFailure(@NonNull Exception e) {
+                                            Log.w(TAG, "Error writing document", e);
+                                        }
+                                    });
+
+
+
                             closBottomSheet(bottomSheetDialog);
                             showLoginBottomSheet();
-                            //updateUI(user);
+                            updateUI(user);
                         } else {
                             Log.w(TAG, "createUserWithEmail:failure", task.getException());
                             Toast.makeText(getApplicationContext(),
                                     task.getException().getMessage(),
                                     Toast.LENGTH_LONG).show();
-                            //updateUI(null);
+                            updateUI(null);
                         }
                     }
                 });
@@ -194,19 +242,111 @@ public class HomePageActivity extends AppCompatActivity {
         FirebaseAuth.getInstance().signOut();
     }
 
-    @Override
-    public void onStart() {
-        super.onStart();
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        //updateUI(currentUser);
+    private void updateUI(FirebaseUser user) {
+        if (user != null) {
+            Toast.makeText(this, "Bem-vindo " + user.getEmail(), Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "Você não está logado.", Toast.LENGTH_SHORT).show();
+        }
     }
 
-    //////////////----CRIAÇÃO DE TAREFAS----//////////////////
+    //////////////----TAREFAS----//////////////////
 
     private void showAddTask(){
 
+        Dialog dialog = new Dialog(this);
+        dialog.setContentView(R.layout.dialog_add_task);
+
+        EditText inputTilteTask = dialog.findViewById(R.id.inputTitleTask);
+        EditText inputDescriptionTask = dialog.findViewById(R.id.inputDescriptionTask);
+        DatePicker inputDateTask = dialog.findViewById(R.id.inputDateTask);
+        Button btnCreateTask = dialog.findViewById(R.id.btnCreateTask);
+
+        btnCreateTask.setOnClickListener(v->{
+
+            String title = inputTilteTask.getText().toString();
+            String description = inputDescriptionTask.getText().toString();
+            int day = inputDateTask.getDayOfMonth();
+            int month = inputDateTask.getMonth();
+            int year = inputDateTask.getYear();
+
+            if(title.isEmpty() || description.isEmpty() || day == 0 || month == 0 || year == 0){
+                Toast.makeText(getApplicationContext(), "Preencha todos os campos", Toast.LENGTH_SHORT).show();
+            } else {
+                createTask(title, description, day, month, year);
+                dialog.dismiss();
+            }
+
+        });
+
+        dialog.show();
+
     }
 
+    private void createTask(String title, String description, int day, int month, int year) {
+
+        FirebaseUser user = mAuth.getCurrentUser();
+        String uid = user.getUid();
+
+        if (!uid.isEmpty()) {
+
+            TaskApp newTaskApp = new TaskApp(title, description, uid);
+
+            mStore.collection("tasks").document()
+                    .set(newTaskApp)
+                    .addOnSuccessListener(new OnSuccessListener<Void>() {
+                        @Override
+                        public void onSuccess(Void aVoid) {
+                            Log.d(TAG, "DocumentSnapshot successfully written!");
+                        }
+
+                    })
+                    .addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            Log.w(TAG, "Error writing document", e);
+                        }
+                    });
+        } else {
+            
+        }
+
+        loadTasks();
+
+    }
+
+    private void loadTasks(){
+
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+        String uid = currentUser.getUid();
+
+        mStore.collection("tasks")
+                .whereEqualTo("uid", uid)
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+
+                    layoutTasks.removeAllViews();
+
+                    for(QueryDocumentSnapshot document : queryDocumentSnapshots) {
+
+                        View taskView = getLayoutInflater().inflate(R.layout.task_item, layoutTasks, false);
+                        TextView taskTitle = taskView.findViewById(R.id.taskTitle);
+                        TextView taskDescription = taskView.findViewById(R.id.taskDescription);
+
+
+                        taskTitle.setText(document.getString("title"));
+                        taskDescription.setText(document.getString("description"));
+
+                        layoutTasks.addView(taskView);
+
+                    }})
+                    .addOnFailureListener(e -> {
+                    Toast.makeText(getApplicationContext(), "Erro ao carregar tarefas", Toast.LENGTH_SHORT).show();
+
+                });
+
+    }
+
+
+
 }
-
-
