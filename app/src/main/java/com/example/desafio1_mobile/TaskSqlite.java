@@ -12,13 +12,10 @@ public class TaskSqlite extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "tasks.db";
     private static final int DATABASE_VERSION = 4;
-
     public static final String TABLE_TASKS = "tasks";
-
     public static final String COLUMN_ID = "_id";
     public static final String COLUMN_TITLE = "title";
     public static final String COLUMN_DESCRIPTION = "description";
-
     public static final String COLUMN_CONCLUSION_DATE = "conclusion_date";
     public static final String COLUMN_COMPLETED = "completed";
 
@@ -72,6 +69,25 @@ public class TaskSqlite extends SQLiteOpenHelper {
     public void deleteAllTasks(){
         SQLiteDatabase db = this.getWritableDatabase();
         db.delete(TABLE_TASKS, null, null);
+        db.close();
+    }
+
+    public void updateTask(String task_id, String newTitle, String newDescription, Timestamp newDate) {
+
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put("title", newTitle);
+        values.put("description", newDescription);
+        values.put("conclusion_date", newDate.toDate().getTime());
+
+        db.update("tasks", values, "_id = ?", new String[]{task_id});
+        db.close();
+
+    }
+
+    public void deleteTask(String task_id) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        db.delete(TABLE_TASKS, COLUMN_ID + " = ?", new String[]{task_id});
         db.close();
     }
 

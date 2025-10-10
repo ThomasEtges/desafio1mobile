@@ -13,10 +13,10 @@ import android.widget.Button;
 import android.widget.DatePicker;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.SearchView;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.database.Cursor;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
@@ -25,8 +25,6 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import com.example.desafio1_mobile.TaskApp;
-import com.example.desafio1_mobile.User;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
@@ -37,7 +35,6 @@ import com.google.firebase.Timestamp;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
@@ -47,18 +44,13 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
-import java.util.Random;
 
 public class HomePageActivity extends AppCompatActivity {
 
     private FirebaseAuth mAuth;
-
     private FirebaseFirestore mStore;
-
     private LinearLayout layoutTasks;
-
     private TaskSqlite dbHelper;
-
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
     private Button btnGoToLogin;
     private int CounterTasksInTrhreeDays = 0;
@@ -96,8 +88,6 @@ public class HomePageActivity extends AppCompatActivity {
     }
 
     //////////////----TUDO DE LOGIN E CADASTRO----//////////////////
-
-
 
     private void showLoginBottomSheet() {
 
@@ -302,7 +292,7 @@ public class HomePageActivity extends AppCompatActivity {
     private void showAddTask(){
 
         Dialog dialog = new Dialog(this);
-        dialog.setContentView(R.layout.dialog_add_task);
+        dialog.setContentView(R.layout.dialog_task);
 
         EditText inputTilteTask = dialog.findViewById(R.id.inputTitleTask);
         EditText inputDescriptionTask = dialog.findViewById(R.id.inputDescriptionTask);
@@ -386,6 +376,7 @@ public class HomePageActivity extends AppCompatActivity {
     }
 
     private void loadTasksFromFirestore(String uid) {
+
         mStore.collection("tasks")
                 .whereEqualTo("uid", uid)
                 .orderBy("completed", Query.Direction.ASCENDING)
@@ -459,11 +450,21 @@ public class HomePageActivity extends AppCompatActivity {
         TextView taskDescription = taskView.findViewById(R.id.taskDescription);
         TextView taskConclusionDate = taskView.findViewById(R.id.taskConclusionDate);
         Switch taskStatus = taskView.findViewById(R.id.taskStatus);
+        FloatingActionButton taskDelete = taskView.findViewById(R.id.taskDelete);
+        FloatingActionButton taskUpdate = taskView.findViewById(R.id.taskUpdate);
 
         taskTitle.setText(title);
         taskDescription.setText(description);
         taskConclusionDate.setText(dateFormat.format(conclusionDate));
         taskStatus.setChecked(completed);
+
+        taskUpdate.setOnClickListener(v -> {
+            showUpdateTaskDialog(task_id, title, description, conclusionDate);
+        });
+
+        taskDelete.setOnClickListener(v -> {
+            deleteTask(task_id);
+        });
 
         taskStatus.setOnCheckedChangeListener((buttonView, isChecked) -> {
             updateTaskStatus(task_id, isChecked);
@@ -497,6 +498,92 @@ public class HomePageActivity extends AppCompatActivity {
         }
 
         layoutTasks.addView(taskView);
+    }
+
+    private void deleteTask(String task_id) {
+
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+
+        if (currentUser != null) {
+            mStore.collection("tasks").document(task_id)
+                    .delete()
+                    .addOnSuccessListener(v -> {
+                        loadTasks();
+                    });
+        } else {
+            dbHelper.deleteTask(task_id);
+            loadTasks();
+        }
+
+
+    }
+
+    private void showUpdateTaskDialog(String task_id, String currentTitle, String currentDescription, Date currentConclusionDate){
+
+        Dialog dialog = new Dialog(this);
+        dialog.setContentView(R.layout.dialog_task);
+
+        EditText inputTitleTask = dialog.findViewById(R.id.inputTitleTask);
+        EditText inputDescriptionTask = dialog.findViewById(R.id.inputDescriptionTask);
+        DatePicker inputDateTask = dialog.findViewById(R.id.inputDateTask);
+        Button btnCreateTask = dialog.findViewById(R.id.btnCreateTask);
+
+        inputTitleTask.setText(currentTitle);
+        inputDescriptionTask.setText(currentDescription);
+        btnCreateTask.setText("Atualizar");
+
+        Calendar calendar = Calendar.getInstance();
+        calendar.setTime(currentConclusionDate);
+        int year = calendar.get(Calendar.YEAR);
+        int mount = calendar.get(Calendar.MONTH);
+        int day = calendar.get(Calendar.DAY_OF_MONTH);
+        inputDateTask.updateDate(year, mount, day);
+
+        btnCreateTask.setOnClickListener(v->{
+
+            String newTitle = inputTitleTask.getText().toString();
+            String newDescription = inputDescriptionTask.getText().toString();
+            int newDay = inputDateTask.getDayOfMonth();
+            int newMonth = inputDateTask.getMonth();
+            int newYear = inputDateTask.getYear();
+
+            if(newTitle.isEmpty() || newDescription.isEmpty() || newDay == 0){
+                Toast.makeText(getApplicationContext(), "Preencha todos os campos", Toast.LENGTH_SHORT).show();
+            } else {
+                updateTask(task_id, newTitle, newDescription, newDay, newMonth, newYear);
+                dialog.dismiss();
+            }
+
+        });
+
+        dialog.show();
+
+    }
+
+    private void updateTask(String task_id, String newTitle, String newDescription, int newDay, int newMonth, int newYear) {
+
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(newYear, newMonth, newDay);
+        Date date = calendar.getTime();
+        Timestamp newDate = new Timestamp(date);
+
+        if (currentUser != null){
+            mStore.collection("tasks").document(task_id)
+                    .update("title", newTitle,
+                            "description", newDescription,
+                            "conclusion_date", newDate)
+                            .addOnSuccessListener(v-> {
+                                Toast.makeText(getApplicationContext(), "Tarefa atualziada", Toast.LENGTH_SHORT).show();
+                                loadTasks();
+                            });
+        } else {
+            dbHelper.updateTask(task_id, newTitle, newDescription, newDate);
+            Toast.makeText(getApplicationContext(), "Tarefa atualziada", Toast.LENGTH_SHORT).show();
+            loadTasks();
+        }
+
     }
 
     private void updateTaskStatus(String task_id, boolean completed) {
@@ -543,7 +630,5 @@ public class HomePageActivity extends AppCompatActivity {
         }
 
     }
-
-
 
 }

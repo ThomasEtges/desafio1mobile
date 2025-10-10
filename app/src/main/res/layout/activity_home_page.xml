@@ -87,11 +87,21 @@
 
     </LinearLayout>
 
+    <SearchView
+        android:id="@+id/filterNameTask"
+        android:layout_height="wrap_content"
+        android:layout_width="match_parent"
+        android:layout_marginTop="5dp"
+        android:iconifiedByDefault="false"
+        android:queryHint="Filtrar tarefa por título"
+        android:layout_below="@+id/headerLayout"
+        android:background="#595959" />
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_below="@id/headerLayout"
-        android:layout_above="@+id/btnAddTask"
+        android:layout_below="@id/filterNameTask"
+        android:layout_above="@+id/buttonsContainer"
         android:padding="16dp">
 
         <LinearLayout
@@ -102,13 +112,23 @@
     </ScrollView>
 
 
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/btnAddTask"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:id="@+id/buttonsContainer"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:orientation="horizontal"
         android:layout_alignParentBottom="true"
-        android:layout_alignParentEnd="true"
-        android:layout_margin="16dp"
-        android:contentDescription="Criar tarefa" />
+        android:layout_margin="6dp"
+        android:gravity="center">
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnAddTask"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:contentDescription="Criar tarefa"
+            app:srcCompat="@android:drawable/ic_input_add" />
+
+    </LinearLayout>
 
 </RelativeLayout>
