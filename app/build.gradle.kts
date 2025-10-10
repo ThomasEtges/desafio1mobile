@@ -41,6 +41,7 @@ dependencies {
     implementation(libs.constraintlayout)
     implementation("com.google.firebase:firebase-auth")
     implementation(libs.firebase.firestore)
+    implementation(libs.contentpager)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)

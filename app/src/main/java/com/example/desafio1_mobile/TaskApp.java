@@ -30,9 +30,7 @@ public class TaskApp {
         return conclusion_date;
     }
 
-    public void setConclusion_date(Timestamp conclusion_date) {
-        this.conclusion_date = conclusion_date;
-    }
+    public void setConclusion_date(Timestamp conclusion_date) {this.conclusion_date = conclusion_date;}
 
     public Boolean getCompleted() {
         return completed;
@@ -49,6 +47,8 @@ public class TaskApp {
     public String getDescription() {
         return description;
     }
+
+    public void setCompleted(Boolean completed) {this.completed = completed; }
 
     public void setDescription(String description) {
         this.description = description;

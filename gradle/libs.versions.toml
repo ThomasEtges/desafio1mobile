@@ -12,6 +12,7 @@ materialSymbolsVariablefont = "0.19.2"
 googleGmsGoogleServices = "4.4.3"
 firebaseAuth = "24.0.1"
 firebaseFirestore = "26.0.1"
+contentpager = "1.0.0"
 
 [libraries]
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
@@ -25,6 +26,7 @@ constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayo
 material-symbols-variablefont = { module = "com.google.android.material:material-symbols-variablefont", version.ref = "materialSymbolsVariablefont" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth", version.ref = "firebaseAuth" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore", version.ref = "firebaseFirestore" }
+contentpager = { group = "androidx.contentpager", name = "contentpager", version.ref = "contentpager" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

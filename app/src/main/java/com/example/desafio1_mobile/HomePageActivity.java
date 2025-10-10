@@ -4,6 +4,7 @@ import static android.content.ContentValues.TAG;
 
 import android.app.Dialog;
 import android.database.Cursor;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Patterns;
@@ -12,6 +13,7 @@ import android.widget.Button;
 import android.widget.DatePicker;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.database.Cursor;
@@ -38,11 +40,13 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.Locale;
 import java.util.Random;
 
 public class HomePageActivity extends AppCompatActivity {
@@ -55,7 +59,11 @@ public class HomePageActivity extends AppCompatActivity {
 
     private TaskSqlite dbHelper;
 
+    private final SimpleDateFormat dateFormat = new SimpleDateFormat("dd/MM/yyyy", Locale.getDefault());
     private Button btnGoToLogin;
+    private int CounterTasksInTrhreeDays = 0;
+    private int CounterTasksInOneWeek = 0;
+    private int CounterTasksDoLater = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,7 +80,6 @@ public class HomePageActivity extends AppCompatActivity {
         mStore = FirebaseFirestore.getInstance();
         dbHelper = new TaskSqlite(this);
 
-
         btnGoToLogin = findViewById(R.id.btnGoToLogin);
         FloatingActionButton btnAddTask = findViewById(R.id.btnAddTask);
         layoutTasks = findViewById(R.id.layoutTasks);
@@ -86,7 +93,6 @@ public class HomePageActivity extends AppCompatActivity {
         super.onStart();
         FirebaseUser currentUser = mAuth.getCurrentUser();
         updateUI(currentUser);
-        loadTasks();
     }
 
     //////////////----TUDO DE LOGIN E CADASTRO----//////////////////
@@ -209,11 +215,13 @@ public class HomePageActivity extends AppCompatActivity {
                                             } else {
                                                 Toast.makeText(getApplicationContext(), "não primeiro login", Toast.LENGTH_SHORT).show();
                                             }
+                                            closBottomSheet(bottomSheetDialog);
+                                            updateUI(currentUser);
                                         }
-                                        closBottomSheet(bottomSheetDialog);
-                                        updateUI(currentUser);
+
                                     });
                         }
+
                     } else {
                         Log.w(TAG, "signInWithCustomToken:failure", task.getException());
                         Toast.makeText(getApplicationContext(), "Informações inválidas, email ou senha errados.",
@@ -326,14 +334,14 @@ public class HomePageActivity extends AppCompatActivity {
 
         FirebaseUser curentUser = mAuth.getCurrentUser();
 
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(year, month, day);
+        Date date = calendar.getTime();
+        Timestamp timestamp = new Timestamp(date);
+
         if (curentUser != null) {
 
             String uid = curentUser.getUid();
-
-            Calendar calendar = Calendar.getInstance();
-            calendar.set(year, month, day);
-            Date date = calendar.getTime();
-            Timestamp timestamp = new Timestamp(date);
 
             TaskApp newTaskApp = new TaskApp(title, description, timestamp, uid);
 
@@ -342,96 +350,167 @@ public class HomePageActivity extends AppCompatActivity {
                     .addOnSuccessListener(new OnSuccessListener<Void>() {
                         @Override
                         public void onSuccess(Void aVoid) {
-                            Log.d(TAG, "DocumentSnapshot successfully written!");
+                            loadTasks();
+                            Toast.makeText(getApplicationContext(), "Salvo Firestore", Toast.LENGTH_SHORT).show();
                         }
 
-                    })
-                    .addOnFailureListener(new OnFailureListener() {
-                        @Override
-                        public void onFailure(@NonNull Exception e) {
-                            Log.w(TAG, "Error writing document", e);
-                        }
                     });
-
-                Toast.makeText(getApplicationContext(), "Salvo Firestore", Toast.LENGTH_SHORT).show();
 
         } else {
 
             int countTasks = dbHelper.getTasksCount();
             if (countTasks >= 5){
                 Toast.makeText(getApplicationContext(), "Limite de 5 tarefas, faça login para mais tarefas", Toast.LENGTH_SHORT).show();
-                return;
             } else {
-                dbHelper.createtTaskSqlite(title, description, false);
+                dbHelper.createtTaskSqlite(title, description, timestamp, false);
                 Toast.makeText(getApplicationContext(), "Salvo Sqlite", Toast.LENGTH_SHORT).show();
+                loadTasks();
             }
         }
 
-        loadTasks();
-
     }
 
-    private void loadTasks(){
+    private void loadTasks() {
 
         layoutTasks.removeAllViews();
+        resetCounterTasks();
 
         FirebaseUser currentUser = mAuth.getCurrentUser();
 
-        if(currentUser != null) {
-
-            String uid = currentUser.getUid();
-            mStore.collection("tasks")
-                    .whereEqualTo("uid", uid)
-                    .get()
-                    .addOnSuccessListener(queryDocumentSnapshots -> {
-
-                        for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
-
-                            View taskView = getLayoutInflater().inflate(R.layout.task_item, layoutTasks, false);
-
-                            TextView taskTitle = taskView.findViewById(R.id.taskTitle);
-                            TextView taskDescription = taskView.findViewById(R.id.taskDescription);
-                            TextView taskConclusionDate = taskView.findViewById(R.id.taskConclusionDate);
-
-                            taskTitle.setText(document.getString("title"));
-                            taskDescription.setText(document.getString("description"));
-                            Timestamp timestamp = document.getTimestamp("conclusion_date");
-                            Date date = timestamp.toDate();
-                            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
-                            taskConclusionDate.setText(sdf.format(date));
-
-                            layoutTasks.addView(taskView);
-
-                        }
-                    })
-                    .addOnFailureListener(e -> {
-                        Toast.makeText(getApplicationContext(), "Erro ao carregar tarefas", Toast.LENGTH_SHORT).show();
-
-                    });
+        if (currentUser != null) {
+            loadTasksFromFirestore(currentUser.getUid());
         } else {
+            loadTasksFromSqlite();
+        }
 
-            Cursor cursor = dbHelper.getAllTasks();
+    }
 
-            if(cursor.moveToFirst()) {
+    private void loadTasksFromFirestore(String uid) {
+        mStore.collection("tasks")
+                .whereEqualTo("uid", uid)
+                .orderBy("completed", Query.Direction.ASCENDING)
+                .orderBy("conclusion_date", Query.Direction.ASCENDING)
+                .get()
+                .addOnSuccessListener(queryDocumentSnapshots -> {
+
+                    for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
+
+                        String title = document.getString("title");
+                        String description = document.getString("description");
+                        Timestamp timestamp = document.getTimestamp("conclusion_date");
+                        Boolean completed = document.getBoolean("completed");
+                        String task_id = document.getId();
+
+
+                        addTaskView(title, description, timestamp.toDate(), completed, task_id);
+                    }
+
+                    updateCounterTasks();
+                });
+    }
+
+    private void loadTasksFromSqlite() {
+
+        Cursor cursor = dbHelper.getAllTasks();
+
+            if (cursor.moveToFirst()) {
                 do {
-
-                    View taskView = getLayoutInflater().inflate(R.layout.task_item, layoutTasks, false);
-                    TextView taskTitle = taskView.findViewById(R.id.taskTitle);
-                    TextView taskDescription = taskView.findViewById(R.id.taskDescription);
-
                     String title = cursor.getString(cursor.getColumnIndexOrThrow("title"));
                     String description = cursor.getString(cursor.getColumnIndexOrThrow("description"));
+                    long dateInMillis = cursor.getLong(cursor.getColumnIndexOrThrow("conclusion_date"));
+                    int completedInfo = cursor.getColumnIndexOrThrow("completed");
+                    boolean completed = cursor.getInt(completedInfo) == 1;
+                    long id = cursor.getLong(cursor.getColumnIndexOrThrow("_id"));
+                    String task_id = String.valueOf(id);
 
-                    taskTitle.setText(title);
-                    taskDescription.setText(description);
-
-                    layoutTasks.addView(taskView);
+                    addTaskView(title, description, new Date(dateInMillis), completed, task_id);
 
                 } while (cursor.moveToNext());
             }
 
+            updateCounterTasks();
             cursor.close();
+    }
 
+    private void resetCounterTasks(){
+        CounterTasksInTrhreeDays = 0;
+        CounterTasksInOneWeek = 0;
+        CounterTasksDoLater = 0;
+    }
+
+    private void updateCounterTasks(){
+
+        TextView TasksInThreeDays = findViewById(R.id.TasksInTrhreeDays);
+        TasksInThreeDays.setText(String.valueOf(CounterTasksInTrhreeDays));
+
+        TextView TasksInOneWeek = findViewById(R.id.TasksInOneWeek);
+        TasksInOneWeek.setText(String.valueOf(CounterTasksInOneWeek));
+
+        TextView TasksDoLater = findViewById(R.id.TasksDoLater);
+        TasksDoLater.setText(String.valueOf(CounterTasksDoLater));
+
+    }
+
+    private void addTaskView(String title, String description, Date conclusionDate, Boolean completed, String task_id) {
+
+        View taskView = getLayoutInflater().inflate(R.layout.task_item, layoutTasks, false);
+
+        TextView taskTitle = taskView.findViewById(R.id.taskTitle);
+        TextView taskDescription = taskView.findViewById(R.id.taskDescription);
+        TextView taskConclusionDate = taskView.findViewById(R.id.taskConclusionDate);
+        Switch taskStatus = taskView.findViewById(R.id.taskStatus);
+
+        taskTitle.setText(title);
+        taskDescription.setText(description);
+        taskConclusionDate.setText(dateFormat.format(conclusionDate));
+        taskStatus.setChecked(completed);
+
+        taskStatus.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            updateTaskStatus(task_id, isChecked);
+        });
+
+        Date now = new Date();
+        long diffMillis = conclusionDate.getTime() - now.getTime();
+        long diffDays = diffMillis / (1000 * 60 * 60 * 24);
+
+        if (diffDays < 0) {
+            taskView.setBackgroundColor(Color.parseColor("#77acdc"));
+        } else if (diffDays <= 3) {
+            if(!completed) {
+                CounterTasksInTrhreeDays++;
+            }
+            taskView.setBackgroundColor(Color.parseColor("#ec274a"));
+        } else if (diffDays <= 7) {
+            if(!completed) {
+                CounterTasksInOneWeek++;
+            }
+            taskView.setBackgroundColor(Color.parseColor("#FFF9C4"));
+        } else {
+            if(!completed) {
+                CounterTasksDoLater++;
+            }
+            taskView.setBackgroundColor(Color.parseColor("#C8E6C9"));
+        }
+
+        if(completed){
+            taskView.setBackgroundColor(Color.parseColor("#608809"));
+        }
+
+        layoutTasks.addView(taskView);
+    }
+
+    private void updateTaskStatus(String task_id, boolean completed) {
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+
+        if (currentUser != null) {
+            mStore.collection("tasks").document(task_id)
+                    .update("completed", completed)
+                    .addOnSuccessListener(v -> {
+                        loadTasks();
+                    });
+        } else {
+            dbHelper.updateTaskStatus(task_id, completed);
+            loadTasks();
         }
 
     }
@@ -446,8 +525,10 @@ public class HomePageActivity extends AppCompatActivity {
 
                     String title = cursor.getString(cursor.getColumnIndexOrThrow("title"));
                     String description = cursor.getString(cursor.getColumnIndexOrThrow("description"));
+                    Date date = new Date(cursor.getLong(cursor.getColumnIndexOrThrow("conclusion_date")));
+                    Timestamp conclusion_date = new Timestamp(date);
 
-                    TaskApp taskToTransfer = new TaskApp(title, description, null, uid);
+                    TaskApp taskToTransfer = new TaskApp(title, description, conclusion_date, uid);
 
                     mStore.collection("tasks").document()
                             .set(taskToTransfer);
